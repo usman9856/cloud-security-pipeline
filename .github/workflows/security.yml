@@ -32,5 +32,5 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: .
-          framework: terraform
-          soft_fail: false # findings fail the build
+          config_file: .checkov.yaml
+          soft_fail: false
