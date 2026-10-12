@@ -16,37 +16,38 @@ export function isMockModeConfigured(): boolean {
 }
 
 /**
- * Validates that an arbitrary value is an object containing a boolean `ok` property.
+ * Safely extracts the boolean `ok` from either a direct payload `{ ok: boolean }`
+ * or an AWS Lambda proxy integration response `{ statusCode: number, body: string }`.
+ * Returns null if the payload does not match the expected schema.
  */
-function isValidHealthPayload(data: unknown): data is { ok: boolean } {
+function extractHealthOk(data: unknown): boolean | null {
   if (typeof data !== "object" || data === null) {
-    return false;
+    return null;
   }
 
   // Handle direct payload { ok: boolean }
   if ("ok" in data && typeof (data as { ok: unknown }).ok === "boolean") {
-    return true;
+    return (data as { ok: boolean }).ok;
   }
 
-  // Handle standard AWS Lambda proxy payload { statusCode: number, body: string }
-  if (
-    "body" in data &&
-    typeof (data as { body: unknown }).body === "string"
-  ) {
+  // Handle AWS Lambda proxy integration response { body: string }
+  if ("body" in data && typeof (data as { body: unknown }).body === "string") {
     try {
-      const parsedBody = JSON.parse((data as { body: string }).body) as unknown;
-      return (
-        typeof parsedBody === "object" &&
-        parsedBody !== null &&
-        "ok" in parsedBody &&
-        typeof (parsedBody as { ok: unknown }).ok === "boolean"
-      );
+      const parsed = JSON.parse((data as { body: string }).body) as unknown;
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "ok" in parsed &&
+        typeof (parsed as { ok: unknown }).ok === "boolean"
+      ) {
+        return (parsed as { ok: boolean }).ok;
+      }
     } catch {
-      return false;
+      return null;
     }
   }
 
-  return false;
+  return null;
 }
 
 /**
@@ -98,8 +99,9 @@ export async function checkLambdaHealth(): Promise<HealthCheckResult> {
     }
 
     const json = (await response.json()) as unknown;
+    const isOk = extractHealthOk(json);
 
-    if (!isValidHealthPayload(json)) {
+    if (isOk === null) {
       return {
         ok: false,
         responseTimeMs: Math.round(performance.now() - startTime),
@@ -107,12 +109,6 @@ export async function checkLambdaHealth(): Promise<HealthCheckResult> {
         error: "Endpoint response did not match the expected schema.",
       };
     }
-
-    // Determine ok status based on whether body was wrapped or direct
-    const isOk =
-      "ok" in (json as Record<string, unknown>)
-        ? Boolean((json as { ok: boolean }).ok)
-        : Boolean((JSON.parse((json as { body: string }).body) as { ok: boolean }).ok);
 
     return {
       ok: isOk,

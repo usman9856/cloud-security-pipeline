@@ -3,6 +3,7 @@ node_modules/
 
 # Production build artifacts
 dist/
+*.tsbuildinfo
 
 # Environment files
 .env
