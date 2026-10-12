@@ -1,0 +1,42 @@
+[
+  {
+    "id": "terraform-validate",
+    "name": "terraform-validate",
+    "status": "built",
+    "tool": "HashiCorp Terraform v1.6+",
+    "category": "Syntax & Spec",
+    "description": "Validates HCL formatting, provider definitions, and resource block syntax without remote backend state."
+  },
+  {
+    "id": "iac-scan",
+    "name": "iac-scan",
+    "status": "built",
+    "tool": "Bridgecrew Checkov v12",
+    "category": "Infrastructure as Code",
+    "description": "Static policy analysis over Terraform definitions enforced against CIS AWS Foundations and security benchmarks."
+  },
+  {
+    "id": "secret-scan",
+    "name": "secret-scan",
+    "status": "built",
+    "tool": "Gitleaks Action v2",
+    "category": "Secrets Detection",
+    "description": "Full Git history traversal searching for leaked AWS keys, tokens, high-entropy secrets, and credentials."
+  },
+  {
+    "id": "sast",
+    "name": "SAST",
+    "status": "planned",
+    "tool": "Semgrep OSS",
+    "category": "Static Analysis",
+    "description": "Application code scanning across Lambda runtime handlers to detect injection flaws and unsafe object access."
+  },
+  {
+    "id": "sca",
+    "name": "SCA",
+    "status": "planned",
+    "tool": "Trivy / OSV-Scanner",
+    "category": "Dependency Security",
+    "description": "Software composition analysis detecting CVEs and license compliance issues across npm lockfile dependencies."
+  }
+]
