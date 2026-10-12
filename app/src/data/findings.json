@@ -1,0 +1,106 @@
+{
+  "summary": {
+    "fixed": 2,
+    "deferred": 3,
+    "accepted": 11,
+    "total": 16
+  },
+  "items": [
+    {
+      "id": "CKV_AWS_300",
+      "status": "fixed",
+      "title": "S3 Multipart Upload Abort Rule",
+      "rationale": "S3 lifecycle now aborts incomplete multipart uploads after 7 days."
+    },
+    {
+      "id": "CKV_AWS_338",
+      "status": "fixed",
+      "title": "Log Group Retention Period",
+      "rationale": "Log group retention raised from 14 to 365 days."
+    },
+    {
+      "id": "CKV_AWS_35",
+      "status": "deferred",
+      "title": "CloudTrail KMS Encryption",
+      "rationale": "Customer-managed KMS key planned for CloudTrail encryption."
+    },
+    {
+      "id": "CKV_AWS_158",
+      "status": "deferred",
+      "title": "CloudWatch Logs KMS Encryption",
+      "rationale": "Customer-managed KMS key planned for log group encryption."
+    },
+    {
+      "id": "CKV_AWS_145",
+      "status": "deferred",
+      "title": "S3 Bucket KMS Encryption",
+      "rationale": "Customer-managed KMS key planned for S3 bucket encryption."
+    },
+    {
+      "id": "CKV_AWS_117",
+      "status": "accepted",
+      "title": "Lambda VPC Association",
+      "rationale": "Requires NAT Gateway / VPC endpoints; excluded for cost in baseline architecture."
+    },
+    {
+      "id": "CKV_AWS_50",
+      "status": "accepted",
+      "title": "X-Ray Active Tracing",
+      "rationale": "Requires wildcard-resource write permission, conflicting with least privilege."
+    },
+    {
+      "id": "CKV_AWS_115",
+      "status": "accepted",
+      "title": "Lambda Reserved Concurrency",
+      "rationale": "Can fail on new account quotas; concurrency throttled at account level."
+    },
+    {
+      "id": "CKV_AWS_272",
+      "status": "accepted",
+      "title": "Lambda Code Signing",
+      "rationale": "Code signing configuration is out of scope for demo function."
+    },
+    {
+      "id": "CKV_AWS_116",
+      "status": "accepted",
+      "title": "Lambda Dead Letter Queue",
+      "rationale": "DLQ applies to async invokes only; function is invoked directly."
+    },
+    {
+      "id": "CKV_AWS_173",
+      "status": "accepted",
+      "title": "Lambda Environment Encryption",
+      "rationale": "Environment variable holds a parameter name, not a secret."
+    },
+    {
+      "id": "CKV_AWS_252",
+      "status": "accepted",
+      "title": "CloudTrail SNS Delivery",
+      "rationale": "CloudTrail notification delivery via SNS has no notification requirement."
+    },
+    {
+      "id": "CKV2_AWS_10",
+      "status": "accepted",
+      "title": "CloudTrail CloudWatch Integration",
+      "rationale": "CloudTrail to CloudWatch Logs incurs extra cost; out of scope."
+    },
+    {
+      "id": "CKV2_AWS_62",
+      "status": "accepted",
+      "title": "S3 Event Notifications",
+      "rationale": "S3 event notifications not needed for a log bucket."
+    },
+    {
+      "id": "CKV_AWS_144",
+      "status": "accepted",
+      "title": "S3 Cross-Region Replication",
+      "rationale": "Cross-region replication incurs extra cost; out of scope."
+    },
+    {
+      "id": "CKV_AWS_18",
+      "status": "accepted",
+      "title": "S3 Access Logging",
+      "rationale": "Access logging on the log bucket creates a loop."
+    }
+  ]
+}
