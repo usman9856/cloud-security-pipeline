@@ -13,3 +13,18 @@ dist/
 # Local editor and OS files
 .DS_Store
 *.local
+
+# Dependencies
+node_modules/
+
+# Production build artifacts
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local editor and OS files
+.DS_Store
+*.local
