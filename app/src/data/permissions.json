@@ -1,0 +1,23 @@
+[
+  {
+    "id": "write-own-logs",
+    "title": "Write Execution Logs",
+    "sid": "WriteOwnLogs",
+    "actions": [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ],
+    "resource": "arn:aws:logs:${region}:${account}:log-group:/aws/lambda/cloud-sec-pipeline:*",
+    "why": "The function must write its own logs. The log group is created in Terraform (see lambda.tf), so logs:CreateLogGroup is not granted (denied by default). Scoped to that one log group, not logs:* on *."
+  },
+  {
+    "id": "read-one-parameter",
+    "title": "Read SSM Secret Parameter",
+    "sid": "ReadOneParameter",
+    "actions": [
+      "ssm:GetParameter"
+    ],
+    "resource": "arn:aws:ssm:${region}:${account}:parameter/cloud-sec-pipeline/api-token",
+    "why": "The function reads exactly one application configuration secret. Only ssm:GetParameter is granted (no GetParameters, GetParametersByPath, or PutParameter), scoped to that single parameter ARN."
+  }
+]
