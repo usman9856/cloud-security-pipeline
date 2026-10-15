@@ -2,7 +2,7 @@
 
 Real AWS infrastructure, written as code with Terraform and locked down with least-privilege IAM. Every push and pull request runs a GitHub Actions pipeline that checks the code and **fails the build** when something insecure sneaks in.
 
-> **Status: Layers 1 and 2 complete. Secret scanning is in progress; SAST and SCA are next.** Nothing in this README claims more than what exists. Items marked _(planned)_ or _(in progress)_ are not built yet.
+> **Status: all five pipeline jobs are built and passing. The deliberate-failure demo is next.** Nothing in this README claims more than what exists. Items marked _(planned)_ are not built yet.
 
 ## What this is
 
@@ -12,6 +12,7 @@ A small, deliberately minimal AWS setup:
 - **A least-privilege IAM role** for that Lambda with exactly two permissions: write to its own log group, and `ssm:GetParameter` on that one parameter. No wildcards on allow statements.
 - **CloudTrail** audit logging into a locked-down S3 bucket (public access blocked, versioning on, HTTPS-only, 90-day expiry, log file validation on).
 - **A GitHub OIDC role** so a pipeline can get temporary AWS access with no long-lived keys stored in GitHub. It is created by Terraform but not yet used by the pipeline (see Known shortcuts).
+- **A small dashboard app** (`app/`) that visualises the pipeline, findings and permissions. It runs in mock mode and also serves as the scan target for the SAST and SCA jobs.
 
 The Lambda is intentionally tiny. It exists so the IAM policies have something real to protect. The point of the project is the security around it.
 
@@ -19,15 +20,28 @@ The Lambda is intentionally tiny. It exists so the IAM policies have something r
 
 Runs on every push to `main` and every pull request. Each job fails the build on findings.
 
-| Job                  | What it checks                                                                         | Status      |
-| -------------------- | -------------------------------------------------------------------------------------- | ----------- |
-| `terraform-validate` | `terraform fmt -check` (formatting) and `terraform validate` (syntax and references)   | Built       |
-| `iac-scan`           | [Checkov](https://www.checkov.io/) scans the Terraform against AWS security benchmarks | Built       |
-| `secret-scan`        | gitleaks scans the full git history for committed secrets                              | In progress |
-| SAST                 | Static analysis of application code                                                    | Planned     |
-| SCA                  | Dependency vulnerability scan                                                          | Planned     |
+| Job                  | What it checks                                                                              | Status |
+| -------------------- | ------------------------------------------------------------------------------------------- | ------ |
+| `terraform-validate` | `terraform fmt -check` (formatting) and `terraform validate` (syntax and references)        | Built  |
+| `iac-scan`           | [Checkov](https://www.checkov.io/) scans the Terraform against AWS security benchmarks      | Built  |
+| `secret-scan`        | gitleaks scans the full git history for committed secrets                                   | Built  |
+| `sast`               | [Semgrep](https://semgrep.dev/) (`p/default` ruleset) scans the app and Lambda source       | Built  |
+| `sca`                | [OSV-Scanner](https://google.github.io/osv-scanner/) checks npm dependencies for known CVEs | Built  |
 
 `terraform apply` stays **manual** on purpose: the pipeline never changes the AWS account. Terraform state is local, so the pipeline does not run `plan` yet.
+
+### What the app scanners covered
+
+The dashboard in `app/` (React + Vite + TypeScript, mock mode) is the scan target for SAST and SCA.
+
+| Job    | What it scanned                                        | Result                  |
+| ------ | ------------------------------------------------------ | ----------------------- |
+| `sast` | 16 git-tracked files in `app/src` and `src`, 213 rules | 0 findings              |
+| `sca`  | 203 npm packages from `app/package-lock.json`          | 0 known vulnerabilities |
+
+A clean result shows the checks ran, not that they catch anything. The deliberate-failure demo _(planned)_ will commit one insecure change per scanner and show each one failing the build.
+
+Scope limits: SCA covers only the dashboard's lockfile (the Lambda has no dependencies), and Semgrep scans only files tracked by git.
 
 ## Architecture
 
@@ -38,9 +52,9 @@ flowchart LR
         direction TB
         s1["terraform fmt + validate (built)"]
         s2["Checkov IaC scan (built)"]
-        s3["gitleaks secret scan (in progress)"]
-        s4["SAST (planned)"]
-        s5["SCA (planned)"]
+        s3["gitleaks secret scan (built)"]
+        s4["Semgrep SAST (built)"]
+        s5["OSV-Scanner SCA (built)"]
     end
     gha -. "OIDC role created, not used by the pipeline yet" .-> aws
     manual["terraform apply (manual)"] --> aws
@@ -110,6 +124,7 @@ These resources are already encrypted at rest with AWS-managed keys. A customer-
 | `cloudtrail.tf`                  | Audit trail and its locked-down log bucket                                                                           |
 | `github-oidc.tf`                 | OIDC provider and a read-only role GitHub Actions can assume, limited to this repo's `main` branch and pull requests |
 | `outputs.tf`                     | Function name, role ARNs, log bucket name                                                                            |
+| `app/`                           | Dashboard app used as the SAST and SCA scan target                                                                   |
 | `.github/workflows/security.yml` | The pipeline                                                                                                         |
 | `.checkov.yaml`                  | Accepted and deferred Checkov checks, each with a reason                                                             |
 
@@ -136,6 +151,8 @@ terraform destroy
 aws ssm delete-parameter --name /p3-cloudsec/demo-api-key --region us-east-1
 ```
 
+On Windows with Git Bash, prefix any AWS CLI command that takes a `/`-leading value with `MSYS_NO_PATHCONV=1`. Otherwise Git Bash rewrites the path and AWS reports `ParameterNotFound`.
+
 `terraform destroy` also removes the OIDC role. Re-running `terraform apply` recreates it.
 
 Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore` already excludes them.
@@ -152,6 +169,7 @@ Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore`
 - **Scanner rules target production.** Most of the 16 findings were sensible for a large system and overkill for a lab. The discipline is to fix the real ones and document every skip with a reason, not to switch the scanner off.
 - **`known after apply` means "can't tell yet".** A plan line like that is not a change. The Lambda policy showed it, then applied as no change.
 - **Pull requests leave a trail.** Changes go through a PR so the failing and passing runs stay on record.
+- **A green scanner needs checking too.** I read the SAST and SCA logs to confirm they scanned real files and packages before trusting "0 findings". A scanner pointed at the wrong path passes silently.
 
 ## Known shortcuts (lab, not production)
 
@@ -161,3 +179,4 @@ Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore`
 - Terraform state is local. A team setup would use a remote backend with locking, which would also let the pipeline run `plan`.
 - Encryption uses AWS-managed keys. Customer-managed KMS keys are deferred (see above).
 - Branch protection is not enforced, so a failing check does not yet block a merge.
+- The Semgrep container image is not pinned to a version. OSV-Scanner is pinned (v2.3.8).
