@@ -40,11 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # scan the full history, not just the latest commit
+          fetch-depth: 0 # scan the full history, not just the latest commit
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
   sast:
     runs-on: ubuntu-latest
     container:
@@ -63,3 +63,24 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src \
             ghcr.io/google/osv-scanner:v2.3.8 \
             scan source --recursive app
+  aws-auth:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # lets the job request an OIDC token
+      contents: read
+    steps:
+      - name: Show role ARN
+        run: echo "[${{ vars.AWS_ROLE_ARN }}]"
+
+      - name: Print OIDC claims
+        run: |
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub, aud}'
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - run: aws sts get-caller-identity
