@@ -2,7 +2,7 @@
 
 Real AWS infrastructure, written as code with Terraform and locked down with least-privilege IAM. Every push and pull request runs a GitHub Actions pipeline that checks the code and **fails the build** when something insecure sneaks in.
 
-> **Status: all five pipeline jobs are built and passing. The deliberate-failure demo is next.** Nothing in this README claims more than what exists. Items marked _(planned)_ are not built yet.
+> **Status: all five scanning jobs are built and passing. A sixth job, `aws-auth` (proof that the pipeline can assume the AWS role via OIDC), is added but currently failing and under investigation. The deliberate-failure demo is next.** Nothing in this README claims more than what exists. Items marked _(planned)_ are not built yet.
 
 ## What this is
 
@@ -11,22 +11,23 @@ A small, deliberately minimal AWS setup:
 - **A Lambda function** that reads one secret and returns `ok: true`. It never returns or logs the secret value.
 - **A least-privilege IAM role** for that Lambda with exactly two permissions: write to its own log group, and `ssm:GetParameter` on that one parameter. No wildcards on allow statements.
 - **CloudTrail** audit logging into a locked-down S3 bucket (public access blocked, versioning on, HTTPS-only, 90-day expiry, log file validation on).
-- **A GitHub OIDC role** so a pipeline can get temporary AWS access with no long-lived keys stored in GitHub. It is created by Terraform but not yet used by the pipeline (see Known shortcuts).
+- **A GitHub OIDC role** so a pipeline can get temporary AWS access with no long-lived keys stored in GitHub. It is created by Terraform. The `aws-auth` job tries to assume it, but that job is not passing yet (see Open issue).
 - **A small dashboard app** (`app/`) that visualises the pipeline, findings and permissions. It runs in mock mode and also serves as the scan target for the SAST and SCA jobs.
 
 The Lambda is intentionally tiny. It exists so the IAM policies have something real to protect. The point of the project is the security around it.
 
 ## What the pipeline does today
 
-Runs on every push to `main` and every pull request. Each job fails the build on findings.
+Runs on every push to `main` and every pull request. The five scanning jobs fail the build on findings.
 
-| Job                  | What it checks                                                                              | Status |
-| -------------------- | ------------------------------------------------------------------------------------------- | ------ |
-| `terraform-validate` | `terraform fmt -check` (formatting) and `terraform validate` (syntax and references)        | Built  |
-| `iac-scan`           | [Checkov](https://www.checkov.io/) scans the Terraform against AWS security benchmarks      | Built  |
-| `secret-scan`        | gitleaks scans the full git history for committed secrets                                   | Built  |
-| `sast`               | [Semgrep](https://semgrep.dev/) (`p/default` ruleset) scans the app and Lambda source       | Built  |
-| `sca`                | [OSV-Scanner](https://google.github.io/osv-scanner/) checks npm dependencies for known CVEs | Built  |
+| Job                  | What it checks                                                                              | Status                             |
+| -------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `terraform-validate` | `terraform fmt -check` (formatting) and `terraform validate` (syntax and references)        | Built, passing                     |
+| `iac-scan`           | [Checkov](https://www.checkov.io/) scans the Terraform against AWS security benchmarks      | Built, passing                     |
+| `secret-scan`        | gitleaks scans the full git history for committed secrets                                   | Built, passing                     |
+| `sast`               | [Semgrep](https://semgrep.dev/) (`p/default` ruleset) scans the app and Lambda source       | Built, passing                     |
+| `sca`                | [OSV-Scanner](https://google.github.io/osv-scanner/) checks npm dependencies for known CVEs | Built, passing                     |
+| `aws-auth`           | Assumes the AWS OIDC role with no stored keys, then runs `aws sts get-caller-identity`      | Built, **failing** (investigating) |
 
 `terraform apply` stays **manual** on purpose: the pipeline never changes the AWS account. Terraform state is local, so the pipeline does not run `plan` yet.
 
@@ -55,8 +56,9 @@ flowchart LR
         s3["gitleaks secret scan (built)"]
         s4["Semgrep SAST (built)"]
         s5["OSV-Scanner SCA (built)"]
+        s6["aws-auth OIDC job (failing)"]
     end
-    gha -. "OIDC role created, not used by the pipeline yet" .-> aws
+    s6 -. "OIDC role exists; assuming it fails today (investigating)" .-> aws
     manual["terraform apply (manual)"] --> aws
     subgraph aws["AWS account"]
         direction TB
@@ -65,6 +67,27 @@ flowchart LR
         trail["CloudTrail"] --> bucket["S3 log bucket"]
     end
 ```
+
+## Open issue: the pipeline cannot assume the AWS role yet
+
+The `aws-auth` job fails at the `configure-aws-credentials` step with:
+
+```
+Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+```
+
+**Checked and correct**
+
+- The role `p3-cloudsec-github-pipeline` exists.
+- Its trust policy requires audience `sts.amazonaws.com` and allows only this repo's `main` branch and pull requests, and it matches the Terraform with no drift.
+- The OIDC provider exists with `sts.amazonaws.com` in its client ID list.
+- The job requests `id-token: write` at job level.
+
+**Not yet confirmed**
+
+- The values the job actually sends (the role ARN variable and the token's `sub` and `aud` claims). Two temporary debug steps in the job print them. Their output has not been reviewed yet.
+
+The trust policy is deliberately not loosened to a repo-wide wildcard to make this pass. Least privilege is the point of the project. This section will be replaced with the root cause and fix once found.
 
 ## Evidence: the pipeline catching real findings
 
@@ -153,7 +176,7 @@ aws ssm delete-parameter --name /p3-cloudsec/demo-api-key --region us-east-1
 
 On Windows with Git Bash, prefix any AWS CLI command that takes a `/`-leading value with `MSYS_NO_PATHCONV=1`. Otherwise Git Bash rewrites the path and AWS reports `ParameterNotFound`.
 
-`terraform destroy` also removes the OIDC role. Re-running `terraform apply` recreates it.
+`terraform destroy` also removes the OIDC role. Re-running `terraform apply` recreates it. To use the `aws-auth` job, set the repository **variable** (not secret) `AWS_ROLE_ARN` to the role's ARN.
 
 Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore` already excludes them.
 
@@ -170,13 +193,14 @@ Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore`
 - **`known after apply` means "can't tell yet".** A plan line like that is not a change. The Lambda policy showed it, then applied as no change.
 - **Pull requests leave a trail.** Changes go through a PR so the failing and passing runs stay on record.
 - **A green scanner needs checking too.** I read the SAST and SCA logs to confirm they scanned real files and packages before trusting "0 findings". A scanner pointed at the wrong path passes silently.
+- **One AWS error, many causes.** "Not authorized to perform sts:AssumeRoleWithWebIdentity" is the same message whether the trust policy, the OIDC provider, the role ARN or the token claims are wrong, so each has to be ruled out in turn.
 
 ## Known shortcuts (lab, not production)
 
 - The deploying IAM user has `AdministratorAccess` to avoid permission friction while learning. A real setup would scope it down.
-- The OIDC role uses the AWS-managed `ReadOnlyAccess` policy. It is broader than the pipeline needs and is not used by any pipeline step yet.
+- The OIDC role uses the AWS-managed `ReadOnlyAccess` policy. It is broader than the pipeline needs (it can read the SSM secret), and the only job that uses it, `aws-auth`, is not passing yet.
 - The log bucket uses `force_destroy = true` so `terraform destroy` works cleanly.
 - Terraform state is local. A team setup would use a remote backend with locking, which would also let the pipeline run `plan`.
 - Encryption uses AWS-managed keys. Customer-managed KMS keys are deferred (see above).
-- Branch protection is not enforced, so a failing check does not yet block a merge.
+- Branch protection is not enforced, so a failing check does not yet block a merge. When enabled, it will require the five scanning jobs.
 - The Semgrep container image is not pinned to a version. OSV-Scanner is pinned (v2.3.8).

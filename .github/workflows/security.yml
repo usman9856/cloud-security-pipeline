@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -64,6 +65,7 @@ jobs:
             ghcr.io/google/osv-scanner:v2.3.8 \
             scan source --recursive app
   aws-auth:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       id-token: write # lets the job request an OIDC token
