@@ -86,3 +86,21 @@ jobs:
           aws-region: us-east-1
 
       - run: aws sts get-caller-identity
+  ci-green:
+    name: CI green
+    if: always()
+    needs: [terraform-validate, iac-scan, secret-scan, sast, sca]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail unless every scan job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "A required job did not succeed."
+              exit 1
+            fi
+          done
