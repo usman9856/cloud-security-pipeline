@@ -204,3 +204,39 @@ Never commit `terraform.tfstate`, `.terraform/`, or `*.tfvars`. The `.gitignore`
 - Encryption uses AWS-managed keys. Customer-managed KMS keys are deferred (see above).
 - Branch protection is not enforced, so a failing check does not yet block a merge. When enabled, it will require the five scanning jobs.
 - The Semgrep container image is not pinned to a version. OSV-Scanner is pinned (v2.3.8).
+
+## Troubleshooting: GitHub OIDC role assumption failed
+
+**Symptom:** The `aws-auth` job failed with
+`Not authorized to perform sts:AssumeRoleWithWebIdentity`, even though the
+role, OIDC provider, audience and job permissions were all correct.
+
+**Diagnosis:** A temporary debug step decoded the OIDC token and printed its
+`sub` claim. It didn't match the trust policy:
+
+|                       | Value                                                        |
+| --------------------- | ------------------------------------------------------------ |
+| Trust policy expected | `repo:<owner>/<repo>:ref:refs/heads/main`                    |
+| Token actually sent   | `repo:<owner>@<ownerID>/<repo>@<repoID>:ref:refs/heads/main` |
+
+The repository has GitHub's immutable OIDC subject format enabled
+(`use_immutable_subject: true`), which embeds the numeric owner and repo IDs in
+the `sub`. AWS compares the condition as a string, so the trust policy never matched.
+
+**Fix:** Updated the `github_repo` value in Terraform so the trust policy uses
+the exact immutable subject strings. The change was reviewed as a plan
+(1 changed, 0 added, 0 destroyed) before apply.
+
+**Why not a wildcard?** `repo:<owner>/<repo>:*` would have worked but would let
+any branch, tag or workflow in the repo assume the role. Exact strings keep
+least privilege. The immutable format is also safer, because a deleted and
+re-created repo with the same name can't inherit the trust.
+
+**Result:** `aws-auth` assumes the role via OIDC with no stored AWS keys, and
+`aws sts get-caller-identity` returns the assumed-role ARN.
+
+**Lessons**
+
+- Print the real token claims before changing a trust policy.
+- Check what the token contains, not what you assume it contains.
+- Keep trust conditions exact; don't loosen them to make an error go away.

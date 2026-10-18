@@ -1,7 +1,8 @@
 variable "github_repo" {
-  description = "GitHub repo allowed to assume the role, as owner/name"
+  description = "GitHub repo allowed to assume the role, in GitHub's immutable OIDC subject format: owner@ownerID/name@repoID"
   type        = string
-  default     = "usman9856/cloud-security-pipeline"
+  # GitHub's immutable subject format includes the numeric owner and repo IDs.
+  default = "usman9856@67338799/cloud-security-pipeline@1412915246"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
