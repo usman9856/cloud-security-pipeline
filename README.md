@@ -118,13 +118,13 @@ To prove the scanners catch real problems, I committed one insecure change per s
 
 ![PR #8: four failing scanners and a blocked merge](docs/images/pr-blocked.png)
 
-**After:** [the fixed PR](https://github.com/usman9856/cloud-security-pipeline/pull/REPLACE_ME) contains the safe version of each change. All checks pass and the merge is allowed. It is not merged either, so the demo files never reach `main`.
+**After (passing run):** a normal pull request ([PR #9](https://github.com/usman9856/cloud-security-pipeline/pull/9)) runs the same pipeline. All five scan jobs and `CI green` pass, and the merge is allowed. I did not build a separate "fixed" copy of the four demo changes. The fix for each one is in the table below.
 
-![The fixed PR: all checks passing](docs/images/pr-passing.png)
+![PR #9: all checks passing](docs/images/pr-passing.png)
 
 ![Run history: failing demo run, then passing run](docs/images/pipeline-runs.png)
 
-| Scanner     | What I committed                                       | What it caught                                                                                                   | Why it matters                                                      | Fix                                                |
+| Scanner     | What I committed                                       | What it caught                                                                                                   | Why it matters                                                      | How to fix                                         |
 | ----------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
 | Checkov     | An IAM policy with `Action = "*"` and `Resource = "*"` | 9 checks failed on the policy (`CKV_AWS_62`, `CKV_AWS_63`, `CKV_AWS_355`, `CKV2_AWS_40`, `CKV_AWS_286` to `290`) | Anyone who assumes the role gets full admin                         | Name specific actions and resources                |
 | gitleaks    | A made-up AWS access key in a file                     | Rule `aws-access-token`, with file, line and commit                                                              | A committed key stays in git history even after the file is deleted | Remove it, and **revoke and rotate** a real key    |
@@ -134,14 +134,14 @@ To prove the scanners catch real problems, I committed one insecure change per s
 Notes on the demo:
 
 - The access key is made up and tied to no AWS account. It lives only in PR #8's history.
-- gitleaks reads each commit's diff, so deleting a leaked file in a later commit does not clear the finding. That is why the "after" is a separate branch from `main`, not a fix on top of the failing one.
+- gitleaks reads each commit's diff, so deleting a leaked file in a later commit does not clear the finding. That is why a leak needs the key revoked and rotated, not just a follow-up commit that removes the file.
 - Nothing from the demo branches was applied to AWS.
 
 ## Troubleshooting: GitHub OIDC role assumption failed
 
 **Symptom:** the `aws-auth` job failed with `Not authorized to perform sts:AssumeRoleWithWebIdentity`, even though the role, OIDC provider, audience and job permissions were all correct.
 
-**Diagnosis:** a temporary debug step decoded the OIDC token and printed its `sub` claim. It did not match the trust policy:
+**Diagnosis:** a temporary debug step (since removed) decoded the OIDC token and printed its `sub` claim. It did not match the trust policy:
 
 |                       | Value                                                        |
 | --------------------- | ------------------------------------------------------------ |
