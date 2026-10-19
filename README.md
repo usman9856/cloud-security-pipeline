@@ -118,11 +118,11 @@ To prove the scanners catch real problems, I committed one insecure change per s
 
 ![PR #8: four failing scanners and a blocked merge](docs/images/pr-blocked.png)
 
+![Run history: failing demo run, then passing run](docs/images/pipeline-runs.png)
+
 **After (passing run):** a normal pull request ([PR #9](https://github.com/usman9856/cloud-security-pipeline/pull/9)) runs the same pipeline. All five scan jobs and `CI green` pass, and the merge is allowed. I did not build a separate "fixed" copy of the four demo changes. The fix for each one is in the table below.
 
 ![PR #9: all checks passing](docs/images/pr-passing.png)
-
-![Run history: failing demo run, then passing run](docs/images/pipeline-runs.png)
 
 | Scanner     | What I committed                                       | What it caught                                                                                                   | Why it matters                                                      | How to fix                                         |
 | ----------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
